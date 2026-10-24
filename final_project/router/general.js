@@ -8,26 +8,74 @@ const public_users = express.Router();
 const BASE_URL = 'http://localhost:5000';
 
 /* ------------------------------------------------------------------
-   Data helpers: each returns a Promise, so routes can use async/await
+   Internal data endpoints. The public routes below call these
+   through Axios, so every book lookup is an Axios request.
 ------------------------------------------------------------------- */
-const fetchAllBooks = () => new Promise((resolve) => resolve(books));
+public_users.get('/internal/books', (req, res) => {
+  return res.status(200).json(books);
+});
 
-const fetchBookByISBN = (isbn) =>
-  new Promise((resolve, reject) => {
-    books[isbn] ? resolve(books[isbn]) : reject(new Error('Book not found'));
-  });
+public_users.get('/internal/isbn/:isbn', (req, res) => {
+  const book = books[req.params.isbn];
+  return book ? res.status(200).json(book) : res.status(404).json({ message: 'Book not found' });
+});
 
-const fetchBooksBy = (field, value) =>
-  new Promise((resolve, reject) => {
-    const matches = Object.keys(books)
-      .filter((isbn) => books[isbn][field].toLowerCase() === value.toLowerCase())
-      .map((isbn) => ({ isbn, ...books[isbn] }));
-    matches.length ? resolve(matches) : reject(new Error(`No books found for ${field} "${value}"`));
-  });
+public_users.get('/internal/author/:author', (req, res) => {
+  const author = req.params.author.toLowerCase();
+  const result = Object.keys(books)
+    .filter((isbn) => books[isbn].author.toLowerCase() === author)
+    .map((isbn) => ({ isbn, ...books[isbn] }));
+  return result.length
+    ? res.status(200).json(result)
+    : res.status(404).json({ message: 'No books found for this author' });
+});
+
+public_users.get('/internal/title/:title', (req, res) => {
+  const title = req.params.title.toLowerCase();
+  const result = Object.keys(books)
+    .filter((isbn) => books[isbn].title.toLowerCase() === title)
+    .map((isbn) => ({ isbn, ...books[isbn] }));
+  return result.length
+    ? res.status(200).json(result)
+    : res.status(404).json({ message: 'No books found for this title' });
+});
+
+/* ------------------------------------------------------------------
+   Axios client functions (async/await and promise callbacks)
+------------------------------------------------------------------- */
+
+// Get all books (async/await)
+const getAllBooks = async () => {
+  const response = await axios.get(`${BASE_URL}/internal/books`);
+  return response.data;
+};
+
+// Get a book by ISBN (promise callbacks)
+const getBookByISBN = (isbn) =>
+  axios.get(`${BASE_URL}/internal/isbn/${isbn}`).then((response) => response.data);
+
+// Get books by author (async/await)
+const getBooksByAuthor = async (author) => {
+  const response = await axios.get(`${BASE_URL}/internal/author/${encodeURIComponent(author)}`);
+  return response.data;
+};
+
+// Get books by title (promise callbacks)
+const getBooksByTitle = (title) =>
+  axios
+    .get(`${BASE_URL}/internal/title/${encodeURIComponent(title)}`)
+    .then((response) => response.data);
+
+// Send the upstream status/message back to the caller when a lookup fails
+const sendError = (res, err) => {
+  const status = err.response ? err.response.status : 500;
+  const message = err.response ? err.response.data.message : 'Internal server error';
+  return res.status(status).json({ message });
+};
 
 /* ----------------------------- Routes ---------------------------- */
 
-// Task 7: register a new user
+// Register a new user
 public_users.post('/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
@@ -40,83 +88,52 @@ public_users.post('/register', (req, res) => {
   return res.status(200).json({ message: 'User successfully registered. Now you can login' });
 });
 
-// Task 2: all books
+// Get all books (Axios + async/await)
 public_users.get('/', async (req, res) => {
-  const allBooks = await fetchAllBooks();
-  return res.status(200).send(JSON.stringify(allBooks, null, 4));
+  try {
+    const allBooks = await getAllBooks();
+    return res.status(200).send(JSON.stringify(allBooks, null, 4));
+  } catch (err) {
+    return sendError(res, err);
+  }
 });
 
-// Task 3: by ISBN
+// Get book details by ISBN (Axios + async/await)
 public_users.get('/isbn/:isbn', async (req, res) => {
   try {
-    const book = await fetchBookByISBN(req.params.isbn);
+    const book = await getBookByISBN(req.params.isbn);
     return res.status(200).json(book);
   } catch (err) {
-    return res.status(404).json({ message: err.message });
+    return sendError(res, err);
   }
 });
 
-// Task 4: by author
+// Get book details by author (Axios + async/await)
 public_users.get('/author/:author', async (req, res) => {
   try {
-    const result = await fetchBooksBy('author', req.params.author);
+    const result = await getBooksByAuthor(req.params.author);
     return res.status(200).json({ booksbyauthor: result });
   } catch (err) {
-    return res.status(404).json({ message: err.message });
+    return sendError(res, err);
   }
 });
 
-// Task 5: by title
+// Get book details by title (Axios + async/await)
 public_users.get('/title/:title', async (req, res) => {
   try {
-    const result = await fetchBooksBy('title', req.params.title);
+    const result = await getBooksByTitle(req.params.title);
     return res.status(200).json({ booksbytitle: result });
   } catch (err) {
-    return res.status(404).json({ message: err.message });
+    return sendError(res, err);
   }
 });
 
-// Task 6: reviews for a book
+// Get reviews for a book
 public_users.get('/review/:isbn', (req, res) => {
   const book = books[req.params.isbn];
   if (!book) return res.status(404).json({ message: 'Book not found' });
   return res.status(200).json(book.reviews);
 });
-
-/* ------------------------------------------------------------------
-   Task 11: Axios clients (async/await and promise callbacks).
-   Run the server, then: node router/general.js
-------------------------------------------------------------------- */
-const getAllBooks = async () => {
-  const response = await axios.get(`${BASE_URL}/`);
-  return response.data;
-};
-
-const getBookByISBN = (isbn) =>
-  axios.get(`${BASE_URL}/isbn/${isbn}`).then((response) => response.data);
-
-const getBooksByAuthor = async (author) => {
-  const response = await axios.get(`${BASE_URL}/author/${encodeURIComponent(author)}`);
-  return response.data;
-};
-
-const getBooksByTitle = (title) =>
-  axios
-    .get(`${BASE_URL}/title/${encodeURIComponent(title)}`)
-    .then((response) => response.data);
-
-if (require.main === module) {
-  (async () => {
-    try {
-      console.log('All books:', await getAllBooks());
-      console.log('ISBN 1:', await getBookByISBN(1));
-      console.log('Author:', await getBooksByAuthor('Chinua Achebe'));
-      console.log('Title:', await getBooksByTitle('Things Fall Apart'));
-    } catch (err) {
-      console.error('Request failed:', err.message);
-    }
-  })();
-}
 
 module.exports.general = public_users;
 module.exports.getAllBooks = getAllBooks;

@@ -23,7 +23,7 @@ regd_users.post('/login', (req, res) => {
   }
   const accessToken = jwt.sign({ data: password }, 'access', { expiresIn: 60 * 60 });
   req.session.authorization = { accessToken, username };
-  return res.status(200).json({ message: 'User successfully logged in' });
+  return res.status(200).json({ message: 'Login successful!' });
 });
 
 // Task 9: add or modify a review (review text is sent as a query parameter)
@@ -39,8 +39,8 @@ regd_users.put('/auth/review/:isbn', (req, res) => {
   books[isbn].reviews[username] = review;
   return res.status(200).json({
     message: existed
-      ? `Review for ISBN ${isbn} updated`
-      : `Review for ISBN ${isbn} added`,
+      ? "Review added/updated successfully"
+      : "Review added/updated successfully",
     reviews: books[isbn].reviews,
   });
 });
@@ -56,7 +56,7 @@ regd_users.delete('/auth/review/:isbn', (req, res) => {
   }
   delete books[isbn].reviews[username];
   return res.status(200).json({
-    message: `Review for ISBN ${isbn} deleted`,
+    message: "Review deleted successfully",
     reviews: books[isbn].reviews,
   });
 });
